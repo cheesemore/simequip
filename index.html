@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>序章宠装模拟器</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10131a;
+      --panel: #1a1f2b;
+      --line: #31384a;
+      --text: #f4f1ea;
+      --muted: #9aa3b5;
+      --gold: #ffd76a;
+      --gold-2: #e39b34;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      background:
+        radial-gradient(900px 380px at 50% -8%, rgba(255, 196, 90, 0.14), transparent 58%),
+        radial-gradient(640px 480px at 100% 110%, rgba(70, 100, 170, 0.16), transparent 52%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 6;
+      padding: 12px 16px 4px;
+      background: linear-gradient(180deg, rgba(16, 19, 26, 0.96) 55%, rgba(16, 19, 26, 0));
+    }
+    #hud {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      min-width: 132px;
+      padding: 8px 16px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 215, 106, 0.55);
+      background: linear-gradient(180deg, rgba(36, 32, 22, 0.96), rgba(18, 20, 28, 0.96));
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+    .hud-kicker {
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      color: #e7d3a4;
+    }
+    #born-num {
+      font-size: 34px;
+      line-height: 1;
+      font-weight: 800;
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 6px 16px rgba(255, 186, 60, 0.28);
+    }
+    #born-num.bump { animation: bump 0.32s ease; }
+    @keyframes bump {
+      40% { transform: scale(1.14); }
+    }
+    header, main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 8px 0 4px; text-align: center; }
+    .eyebrow {
+      margin: 0 0 4px;
+      color: #cbb892;
+      letter-spacing: 0.42em;
+      font-size: 12px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      background: linear-gradient(180deg, #fff8de 10%, #ffd76a 48%, #e39b34 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .rules {
+      margin: 10px auto 0;
+      max-width: 820px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+      text-align: left;
+    }
+    a { color: var(--gold); }
+    .bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      margin: 14px 0 8px;
+    }
+    button, select {
+      font: inherit;
+      color: var(--text);
+      background: #232938;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    button:hover { border-color: #6d7890; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button.primary {
+      background: linear-gradient(180deg, #4a4030, #2c261c);
+      border-color: rgba(255, 215, 106, 0.55);
+      color: #ffe7ad;
+    }
+    .legend { display: flex; gap: 10px; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+    .swatch {
+      width: 14px; height: 14px; border-radius: 3px; display: inline-block;
+      border: 1px solid rgba(255,255,255,0.25); vertical-align: -2px; margin-right: 2px;
+    }
+    #count, #status { min-height: 1.4em; font-size: 13px; color: var(--muted); }
+    #status { color: var(--text); }
+    main { display: flex; gap: 16px; align-items: flex-start; padding-bottom: 32px; }
+    .stage {
+      flex: 1;
+      min-width: 0;
+      position: relative;
+      background: rgba(0, 0, 0, 0.18);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    #board canvas { display: block; width: 100%; height: auto; }
+    #empty {
+      position: absolute; left: 16px; right: 16px; top: 72px;
+      text-align: center; color: var(--muted);
+    }
+    aside { width: 372px; flex: none; position: sticky; top: 92px; }
+    .item-card {
+      position: relative;
+      background:
+        radial-gradient(120% 70% at 50% 0%, rgba(255, 215, 106, 0.13), transparent 52%),
+        linear-gradient(180deg, #242a38, #151922);
+      border: 1px solid rgba(255, 215, 106, 0.32);
+      border-radius: 18px;
+      padding: 16px 16px 14px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+      overflow: hidden;
+    }
+    .item-card:before {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; top: 0;
+      height: 4px;
+      background: var(--tier, var(--gold));
+    }
+    .card-head { display: flex; gap: 12px; align-items: center; }
+    .card-icon {
+      width: 92px; height: 92px; flex: none;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .card-name { margin: 0; font-size: 22px; font-weight: 800; color: var(--tier-ink, var(--text)); letter-spacing: 0.04em; }
+    .meta { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .score-block {
+      margin-top: 14px;
+      padding: 8px 8px 12px;
+      text-align: center;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.22);
+    }
+    .score-kicker { margin: 0; letter-spacing: 0.46em; font-size: 12px; color: #e7d3a4; }
+    .score-num {
+      margin: 0;
+      font-size: 76px;
+      line-height: 0.92;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      background: linear-gradient(180deg, #fff8dc 8%, #ffd76a 42%, #f0a020 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 8px 16px rgba(255, 176, 40, 0.22));
+    }
+    .grade {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 3px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+    }
+    .grade-legend { background: rgba(255, 215, 106, 0.18); color: #ffd76a; }
+    .grade-great { background: rgba(126, 182, 255, 0.16); color: #9ec4ff; }
+    .grade-good { background: rgba(125, 222, 160, 0.15); color: #8ee0aa; }
+    .grade-ok { background: rgba(255, 255, 255, 0.06); color: #d5dbe6; }
+    .grade-low { background: rgba(255, 255, 255, 0.04); color: #8b93a3; }
+    .score-expect { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .meter {
+      position: relative;
+      height: 10px;
+      margin: 12px 8px 0;
+      border-radius: 99px;
+      background: #0d1016;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+    .meter-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #6d5830, #ffd76a);
+    }
+    .meter-expect {
+      position: absolute;
+      top: -4px;
+      width: 2px;
+      height: 18px;
+      margin-left: -1px;
+      background: #fff;
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+    }
+    .meter-scale {
+      display: flex;
+      justify-content: space-between;
+      margin: 6px 8px 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .affixes { list-style: none; margin: 12px 0 0; padding: 0; }
+    .affix { padding: 9px 2px 8px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+    .affix-top { display: flex; align-items: baseline; gap: 8px; }
+    .affix-name { font-size: 15px; }
+    .affix-val { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .affix-val.is-max { color: var(--gold); }
+    .affix-score { margin-left: auto; color: var(--gold); font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; }
+    .affix-tag {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: #1a1408;
+      background: var(--gold);
+      border-radius: 999px;
+      padding: 0 6px;
+      font-weight: 800;
+    }
+    .affix-bar {
+      height: 7px;
+      margin-top: 6px;
+      border-radius: 99px;
+      background: #0d1016;
+      overflow: hidden;
+    }
+    .affix-bar span { display: block; height: 100%; border-radius: inherit; }
+    .affix-range { margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .sum { margin: 10px 0 0; color: #e7d3a4; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+    .empty-copy { margin: 28px 8px; color: var(--muted); line-height: 1.7; }
+    #log {
+      margin: 12px 4px 0;
+      white-space: pre-wrap;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      max-height: 160px;
+      overflow: auto;
+    }
+    @media (max-width: 860px) {
+      h1 { font-size: 28px; letter-spacing: 0.12em; }
+      .eyebrow { letter-spacing: 0.22em; }
+      main { flex-direction: column; }
+      aside { width: 100%; position: static; }
+      .score-num { font-size: 64px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div id="hud" title="每生成 1 件 1 级装备加 1。合成和清空不减少。">
+      <div class="hud-kicker">1 级已生成</div>
+      <div id="born-num">0</div>
+    </div>
+  </div>
+  <header>
+    <p class="eyebrow">生成 · 合成 · 评分</p>
+    <h1>序章宠装模拟器</h1>
+    <p class="rules">
+      生成的是 1 级装备。词条条数在该等级允许的条数里平均随机，数值在上下限的整数里平均随机，同一件不重复词条。
+      合成按配置成功率（做成 2、3 级为 20%，做成 4、5 级为 15%），不扣魔币。失败会消耗这 3 件。
+      一键合成从低级做到高级，新装备继续参加下一级。方块按评分从高到低排列。
+      <a href="宠物装备详细.md">配置说明</a>
+    </p>
+    <div class="bar">
+      <button id="gen1" class="primary">生成 1 件</button>
+      <button id="gen10">生成 10 件</button>
+      <button id="gen100">生成 100 件</button>
+      <select id="part" aria-label="部位">
+        <option value="0">随机部位</option>
+        <option value="1">项圈</option>
+        <option value="2">护甲</option>
+        <option value="3">护符</option>
+        <option value="4">饰物</option>
+      </select>
+      <button id="craft" class="primary" disabled>合成选中</button>
+      <button id="craft-all">一键合成</button>
+      <button id="clear-select">取消选择</button>
+      <button id="clear-all">清空</button>
+    </div>
+    <div class="legend">
+      <span><i class="swatch" style="background:#f4f4f4"></i>1 白</span>
+      <span><i class="swatch" style="background:#2f9e44"></i>2 绿</span>
+      <span><i class="swatch" style="background:#2f6fe0"></i>3 蓝</span>
+      <span><i class="swatch" style="background:#8a45d6"></i>4 紫</span>
+      <span><i class="swatch" style="background:#e07a1a"></i>5 橙</span>
+    </div>
+    <p id="count">共 0 件</p>
+    <p id="status"></p>
+  </header>
+  <main>
+    <div class="stage">
+      <div id="empty">背包是空的。先生成 1 级装备。</div>
+      <div id="board"></div>
+    </div>
+    <aside>
+      <div id="detail"></div>
+      <div id="log"></div>
+    </aside>
+  </main>
+  <script src="vendor/pixi.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
