@@ -60,38 +60,60 @@
     };
   }
 
+  function signature(item) {
+    var parts = [];
+    for (var i = 0; i < item.lines.length; i++) {
+      parts.push(item.lines[i].type + ":" + item.lines[i].value);
+    }
+    parts.sort();
+    return parts.join("|");
+  }
+
+  function rollFresh(part, level, avoid) {
+    var banned = {};
+    if (avoid) {
+      for (var i = 0; i < avoid.length; i++) banned[signature(avoid[i])] = true;
+    }
+    var made = roll(part, level);
+    for (var n = 0; n < 12 && banned[signature(made)]; n++) made = roll(part, level);
+    return made;
+  }
+
   function craftAll(items) {
-    var list = items.slice();
+    var groups = {};
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (item.level >= 5) continue;
+      var key = item.level + ":" + item.part;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    }
+    var used = {};
+    var made = [];
     var success = 0;
     var fail = 0;
-    for (var level = 1; level <= 4; level++) {
-      while (true) {
-        var groups = {};
-        for (var i = 0; i < list.length; i++) {
-          var item = list[i];
-          if (item.level !== level) continue;
-          if (!groups[item.part]) groups[item.part] = [];
-          groups[item.part].push(item);
-        }
-        var ready = [];
-        for (var key in groups) {
-          if (groups[key].length >= 3) ready.push(Number(key));
-        }
-        if (!ready.length) break;
-        var part = pick(ready);
-        var mats = shuffle(groups[part]).slice(0, 3);
-        var used = {};
+    for (var key in groups) {
+      var pool = shuffle(groups[key]);
+      var level = pool[0].level;
+      var part = pool[0].part;
+      while (pool.length >= 3) {
+        var mats = pool.splice(0, 3);
         for (var m = 0; m < mats.length; m++) used[mats[m].id] = true;
-        list = list.filter(function (it) { return !used[it.id]; });
         if (Math.random() < DATA.craftRate[level]) {
-          list.push(roll(part, level + 1));
+          made.push(roll(part, level + 1));
           success++;
         } else {
+          made.push(rollFresh(part, level, mats));
           fail++;
         }
       }
     }
-    return { items: list, success: success, fail: fail };
+    var list = [];
+    for (var j = 0; j < items.length; j++) {
+      if (!used[items[j].id]) list.push(items[j]);
+    }
+    for (var k = 0; k < made.length; k++) list.push(made[k]);
+    return { items: list, success: success, fail: fail, made: made };
   }
 
   function selfTest() {
@@ -113,6 +135,7 @@
 
   root.PetSim = {
     roll: roll,
+    rollFresh: rollFresh,
     craftAll: craftAll,
     selfTest: selfTest,
     itemName: function (part, level) { return DATA.names[part][level]; },

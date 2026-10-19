@@ -1,8 +1,8 @@
 (function () {
-  var SIZE = 136;
-  var GAP = 12;
+  var SIZE = 65;
+  var GAP = 5;
+  var BAG_LIMIT = 999;
   var items = [];
-  var selected = {};
   var focusId = 0;
   var logs = [];
   var born = 0;
@@ -27,8 +27,13 @@
   var countEl = document.getElementById("count");
   var logEl = document.getElementById("log");
   var bornEl = document.getElementById("born-num");
-  var craftBtn = document.getElementById("craft");
-  var partSel = document.getElementById("part");
+  var genButtons = [
+    document.getElementById("gen1"),
+    document.getElementById("gen10"),
+    document.getElementById("gen100")
+  ];
+  var sparkIds = {};
+  var SPARK = { 3: 0x6aa6ff, 4: 0xd2a6ff, 5: 0xffb45a };
 
   function setStatus(text) {
     statusEl.textContent = text || "";
@@ -54,24 +59,6 @@
     return null;
   }
 
-  function selectedItems() {
-    var list = [];
-    for (var id in selected) {
-      var item = byId(Number(id));
-      if (item) list.push(item);
-    }
-    return list;
-  }
-
-  function selectionIndex(id) {
-    var n = 1;
-    for (var key in selected) {
-      if (Number(key) === id) return n;
-      n++;
-    }
-    return 0;
-  }
-
   function sortedItems() {
     return items.slice().sort(function (a, b) {
       return b.score - a.score || b.level - a.level || a.id - b.id;
@@ -79,84 +66,36 @@
   }
 
   function pickPart() {
-    var value = Number(partSel.value);
-    if (value >= 1 && value <= 4) return value;
     return 1 + Math.floor(Math.random() * 4);
   }
 
-  function bestOf(list) {
-    var best = list[0];
-    for (var i = 1; i < list.length; i++) {
-      if (list[i].score > best.score) best = list[i];
-    }
-    return best;
+  function bagFull() {
+    return items.length > BAG_LIMIT;
+  }
+
+  function markSpark(item) {
+    if (item.level >= 3) sparkIds[item.id] = item.level;
   }
 
   function generate(n) {
-    var batch = [];
-    for (var i = 0; i < n; i++) {
-      var item = PetSim.roll(pickPart(), 1);
-      items.push(item);
-      batch.push(item);
+    if (bagFull()) {
+      setStatus("背包已超过 999 件，不能再生成");
+      return;
     }
+    for (var i = 0; i < n; i++) items.push(PetSim.roll(pickPart(), 1));
     born += n;
-    focusId = bestOf(batch).id;
     bumpBorn();
     pushLog("生成 " + n + " 件 1 级装备");
-    setStatus("已生成 " + n + " 件 1 级装备");
-    render();
-  }
-
-  function craftMessage(mats) {
-    return "3 件 " + mats[0].level + " 级" + PetSim.partName(mats[0].part);
-  }
-
-  function craftSelected() {
-    var mats = selectedItems();
-    if (mats.length !== 3) {
-      setStatus("请选择 3 件同等级、同部位的装备");
-      return;
-    }
-    var part = mats[0].part;
-    var level = mats[0].level;
-    for (var i = 1; i < mats.length; i++) {
-      if (mats[i].part !== part || mats[i].level !== level) {
-        setStatus("这 3 件不是同等级、同部位");
-        return;
-      }
-    }
-    if (level >= 5) {
-      setStatus("五级不能再合成升级");
-      return;
-    }
-    var rate = PetSim.craftRate(level);
-    var used = {};
-    for (var j = 0; j < mats.length; j++) used[mats[j].id] = true;
-    items = items.filter(function (it) { return !used[it.id]; });
-    selected = {};
-    var pct = Math.round(rate * 100);
-    if (Math.random() < rate) {
-      var made = PetSim.roll(part, level + 1);
-      items.push(made);
-      focusId = made.id;
-      pushLog("合成成功（" + pct + "%）：" + craftMessage(mats) + " → " + PetSim.itemName(made.part, made.level) + " 评分 " + made.score);
-      setStatus("合成成功，得到 " + PetSim.itemName(made.part, made.level) + "，评分 " + made.score);
-    } else {
-      if (used[focusId]) focusId = 0;
-      pushLog("合成失败（" + pct + "%）：" + craftMessage(mats) + " 已消耗");
-      setStatus("合成失败，3 件材料已消耗");
-    }
+    setStatus(bagFull() ? "背包已超过 999 件，不能再生成" : "已生成 " + n + " 件 1 级装备");
     render();
   }
 
   function craftEverything() {
     var result = PetSim.craftAll(items);
     items = result.items;
-    var still = {};
-    for (var id in selected) {
-      if (byId(Number(id))) still[id] = true;
+    if (result.made) {
+      for (var n = 0; n < result.made.length; n++) markSpark(result.made[n]);
     }
-    selected = still;
     if (focusId && !byId(focusId)) focusId = 0;
     pushLog("一键合成：成功 " + result.success + "，失败 " + result.fail);
     setStatus("一键合成结束。成功 " + result.success + "，失败 " + result.fail);
@@ -165,35 +104,11 @@
 
   function onTile(item) {
     focusId = item.id;
-    if (selected[item.id]) {
-      delete selected[item.id];
-      setStatus("已取消选择");
-      render();
-      return;
-    }
-    var chosen = selectedItems();
-    if (chosen.length >= 3) {
-      setStatus("最多选择 3 件");
-      render();
-      return;
-    }
-    if (item.level >= 5) {
-      setStatus("五级不能再合成升级，仍可查看属性");
-      render();
-      return;
-    }
-    if (chosen.length && (chosen[0].part !== item.part || chosen[0].level !== item.level)) {
-      setStatus("要和已选装备同等级、同部位");
-      render();
-      return;
-    }
-    selected[item.id] = true;
-    var n = chosen.length + 1;
-    if (n === 3) {
-      setStatus("已选 3 件 " + item.level + " 级" + PetSim.partName(item.part) + "，成功率 " + Math.round(PetSim.craftRate(item.level) * 100) + "%");
-    } else {
-      setStatus("已选 " + n + " / 3");
-    }
+    render();
+  }
+
+  function closeTip() {
+    focusId = 0;
     render();
   }
 
@@ -213,7 +128,8 @@
 
   function linePct(line) {
     if (line.max <= line.min) return 1;
-    return (line.value - line.min) / (line.max - line.min);
+    var ratio = 30 + Math.floor((70 * (line.value - line.min)) / (line.max - line.min));
+    return ratio / 100;
   }
 
   function barColor(p) {
@@ -229,16 +145,15 @@
     return "#" + s;
   }
 
-  function emptyDetail() {
-    detailEl.innerHTML = "<div class=\"item-card is-empty\"><p class=\"empty-copy\">点一件装备。<br>右边展开词条、区间和评分，方便直接截图。</p></div>";
-  }
-
   function renderDetail() {
+    var tip = document.getElementById("tip");
     var item = focusId ? byId(focusId) : null;
     if (!item) {
-      emptyDetail();
+      tip.hidden = true;
+      detailEl.innerHTML = "";
       return;
     }
+    tip.hidden = false;
     var tier = PetSim.tier(item.level);
     var expected = PetSim.expected(item.part, item.level);
     var span = PetSim.scoreSpan(item.level);
@@ -271,7 +186,7 @@
       if (full) html += "<span class=\"affix-tag\">满</span>";
       html += "<span class=\"affix-score\">" + line.score + " 分</span></div>";
       html += "<div class=\"affix-bar\"><span style=\"width:" + Math.round(p * 100) + "%;background:" + barColor(p) + "\"></span></div>";
-      html += "<div class=\"affix-range\">" + line.min + " – " + line.max + " · 词条 " + Math.round(p * 100) + "%</div></li>";
+      html += "<div class=\"affix-range\">" + line.min + " – " + line.max + " · 评分 " + Math.round(p * 100) + "%</div></li>";
     }
     html += "</ul>";
     html += "<p class=\"sum\">" + lines.map(function (line) { return line.score; }).join(" + ") + " = " + item.score + "</p>";
@@ -287,14 +202,9 @@
       if (!tally[level]) continue;
       bits.push(PetSim.tier(level).name + " " + tally[level]);
     }
-    var chosen = selectedItems();
-    bits.push("已选 " + chosen.length + "/3");
     countEl.textContent = bits.join("  ·  ");
-    var ready = chosen.length === 3 && chosen[0].level < 5;
-    craftBtn.disabled = !ready;
-    craftBtn.textContent = ready
-      ? "合成选中（" + Math.round(PetSim.craftRate(chosen[0].level) * 100) + "%）"
-      : "合成选中";
+    var blocked = bagFull();
+    for (var b = 0; b < genButtons.length; b++) genButtons[b].disabled = blocked;
   }
 
   function textStyle(size, fill, weight) {
@@ -309,8 +219,24 @@
 
   function iconTexture(part, level) {
     var key = part + ":" + level;
-    if (!texCache[key]) texCache[key] = PIXI.Texture.from(PetIcons.canvas(part, level, 192));
+    if (!texCache[key]) texCache[key] = PIXI.Texture.from(PetIcons.url(part, level));
     return texCache[key];
+  }
+
+  function placeIcon(sprite, max, top) {
+    var frame = sprite.texture.frame;
+    var w = frame.width;
+    var h = frame.height;
+    if (!w || !h || !sprite.texture.baseTexture.valid) {
+      sprite.width = 0;
+      sprite.height = 0;
+      return;
+    }
+    var scale = Math.min(max / w, max / h);
+    sprite.width = Math.round(w * scale);
+    sprite.height = Math.round(h * scale);
+    sprite.x = (SIZE - sprite.width) / 2;
+    sprite.y = top + Math.round((max - sprite.height) / 2);
   }
 
   function makeTile(item) {
@@ -319,72 +245,109 @@
     tile.eventMode = "static";
     tile.cursor = "pointer";
     var focused = item.id === focusId;
-    var picked = !!selected[item.id];
     var g = new PIXI.Graphics();
-    var stroke = picked ? 0xffd76a : (focused ? 0xfff1c2 : tier.stroke);
-    var strokeWidth = picked ? 4 : 2;
+    var stroke = focused ? 0xfff1c2 : tier.stroke;
+    var strokeWidth = 2;
     g.lineStyle(strokeWidth, stroke, 1);
     g.beginFill(0x161b26);
-    g.drawRoundedRect(strokeWidth / 2, strokeWidth / 2, SIZE - strokeWidth, SIZE - strokeWidth, 14);
+    g.drawRoundedRect(strokeWidth / 2, strokeWidth / 2, SIZE - strokeWidth, SIZE - strokeWidth, 8);
     g.endFill();
     g.lineStyle(0);
     g.beginFill(tier.fill);
-    g.drawRoundedRect(12, 8, SIZE - 24, 4, 2);
+    g.drawRoundedRect(7, 4, SIZE - 14, 2, 1);
     g.endFill();
     tile.addChild(g);
 
+    var iconMax = 36;
     var icon = new PIXI.Sprite(iconTexture(item.part, item.level));
-    icon.width = 78;
-    icon.height = 78;
-    icon.x = (SIZE - 78) / 2;
-    icon.y = 14;
+    placeIcon(icon, iconMax, 3);
+    if (!icon.texture.baseTexture.valid) {
+      icon.texture.baseTexture.once("loaded", function () {
+        if (!icon.destroyed) placeIcon(icon, iconMax, 3);
+      });
+    }
     tile.addChild(icon);
 
-    var name = new PIXI.Text(PetSim.itemName(item.part, item.level), textStyle(14, 0xf4f1ea, "700"));
+    var name = new PIXI.Text(PetSim.itemName(item.part, item.level), textStyle(8, 0xf4f1ea, "700"));
     name.anchor.set(0.5, 0);
     name.x = SIZE / 2;
-    name.y = 92;
+    name.y = 41;
     tile.addChild(name);
 
     var scorePlate = new PIXI.Graphics();
     scorePlate.beginFill(0x10131a, 0.72);
-    scorePlate.drawRoundedRect(28, 112, SIZE - 56, 18, 8);
+    scorePlate.drawRoundedRect(10, 51, SIZE - 20, 11, 4);
     scorePlate.endFill();
     tile.addChild(scorePlate);
 
-    var score = new PIXI.Text(String(item.score), textStyle(15, 0xffd76a, "800"));
+    var score = new PIXI.Text(String(item.score), textStyle(8, 0xffd76a, "800"));
     score.anchor.set(0.5, 0);
     score.x = SIZE / 2;
-    score.y = 112;
+    score.y = 51;
     tile.addChild(score);
 
     var levelPlate = new PIXI.Graphics();
     levelPlate.beginFill(tier.fill);
-    levelPlate.drawRoundedRect(8, 16, 28, 16, 6);
+    levelPlate.drawRoundedRect(3, 3, 12, 10, 3);
     levelPlate.endFill();
     tile.addChild(levelPlate);
-    var levelText = new PIXI.Text(String(item.level), textStyle(12, tier.text, "800"));
+    var levelText = new PIXI.Text(String(item.level), textStyle(7, tier.text, "800"));
     levelText.anchor.set(0.5);
-    levelText.x = 22;
-    levelText.y = 24;
+    levelText.x = 9;
+    levelText.y = 8;
     tile.addChild(levelText);
 
-    var order = selectionIndex(item.id);
-    if (order) {
-      var badge = new PIXI.Graphics();
-      badge.beginFill(0xffd76a);
-      badge.drawCircle(SIZE - 16, 20, 10);
-      badge.endFill();
-      tile.addChild(badge);
-      var orderText = new PIXI.Text(String(order), textStyle(12, 0x2a220c, "800"));
-      orderText.anchor.set(0.5);
-      orderText.x = SIZE - 16;
-      orderText.y = 20;
-      tile.addChild(orderText);
-    }
-
     tile.on("pointertap", function () { onTile(item); });
+    if (sparkIds[item.id]) {
+      playBirth(tile, sparkIds[item.id]);
+      delete sparkIds[item.id];
+    }
     return tile;
+  }
+
+  function playBirth(tile, level) {
+    var color = SPARK[level] || 0x6aa6ff;
+    var fx = new PIXI.Graphics();
+    tile.addChild(fx);
+    var bornAt = performance.now();
+    var sparks = [];
+    for (var i = 0; i < 10; i++) {
+      sparks.push({
+        ang: Math.random() * Math.PI * 2,
+        dist: 18 + Math.random() * 28,
+        size: 1.5 + Math.random() * 1.8
+      });
+    }
+    function tick() {
+      if (tile.destroyed) {
+        app.ticker.remove(tick);
+        return;
+      }
+      var t = (performance.now() - bornAt) / 800;
+      fx.clear();
+      if (t >= 1) {
+        app.ticker.remove(tick);
+        if (!fx.destroyed) {
+          tile.removeChild(fx);
+          fx.destroy();
+        }
+        return;
+      }
+      var fade = 1 - t;
+      var cx = SIZE / 2;
+      var cy = 22;
+      fx.lineStyle(4 * fade, color, fade);
+      fx.drawCircle(cx, cy, 14 + t * 38);
+      fx.lineStyle(2 * fade, 0xfff6c8, fade * 0.85);
+      fx.drawCircle(cx, cy, 8 + t * 20);
+      for (var s = 0; s < sparks.length; s++) {
+        var sp = sparks[s];
+        fx.beginFill(t < 0.4 ? 0xffffff : color, fade);
+        fx.drawCircle(cx + Math.cos(sp.ang) * sp.dist * t, cy + Math.sin(sp.ang) * sp.dist * t, sp.size);
+        fx.endFill();
+      }
+    }
+    app.ticker.add(tick);
   }
 
   function renderBoard() {
@@ -428,25 +391,20 @@
     boardHost.appendChild(app.view);
     board = new PIXI.Container();
     app.stage.addChild(board);
-    emptyDetail();
     render();
   }
+
+  document.getElementById("tip-backdrop").onclick = closeTip;
+  document.getElementById("tip-close").onclick = closeTip;
 
   document.getElementById("gen1").onclick = function () { generate(1); };
   document.getElementById("gen10").onclick = function () { generate(10); };
   document.getElementById("gen100").onclick = function () { generate(100); };
-  craftBtn.onclick = craftSelected;
   document.getElementById("craft-all").onclick = craftEverything;
-  document.getElementById("clear-select").onclick = function () {
-    selected = {};
-    setStatus("已取消选择");
-    render();
-  };
   document.getElementById("clear-all").onclick = function () {
     if (!items.length) return;
     if (!window.confirm("清空当前全部装备？")) return;
     items = [];
-    selected = {};
     focusId = 0;
     pushLog("已清空");
     setStatus("已清空");
